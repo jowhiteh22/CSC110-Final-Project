@@ -1,0 +1,247 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(tidyverse)
+library(tidycensus)
+library(tmap)
+library(tmaptools)
+library(ggplot2)
+library(sf)
+library(dplyr)
+library(scales)
+library(tigris)
+
+lfprfw_state <- read_excel("Labor_force_participation_rate_wm.xlsx")
+female_participation <- read_excel("Participation.xlsx")
+job_level_2017 <- read_excel("Change_in_representation_of_women_at_every_job_level.xlsx", sheet = "All2017")
+job_level_2024 <- read_excel("Change_in_representation_of_women_at_every_job_level.xlsx", sheet = "All2024")
+w_m_income <- read_excel("women_men_income.xlsx")
+```
+
+## 1) Labor Force Participation rate for Women & Men by State (2017)
+```{r results='hide'}
+#Supress messages and get ACS data
+us <- suppressMessages(
+  get_acs(
+    geography   = "state", 
+    variables   = "B02001_001", 
+    year        = 2022,
+    geometry    = TRUE
+  )
+)
+
+#Merge data
+merged_us_lfprfw_state_data <- us %>%
+  left_join(
+    lfprfw_state,
+    by = c("NAME" = "State")
+  ) %>%
+  select(
+    NAME,
+    Female_Participation,
+    Male_Participation,
+    geometry
+  ) %>%
+  shift_geometry()
+
+tmap_mode(mode = "plot")
+
+#LFPR Women Map
+merged_us_lfprfw_state_data %>%
+  tm_shape() +
+  tm_polygons(
+    "Female_Participation",
+    palette = "Greens",
+    breaks = c(0, 60, 65, 70, 75, 80, 85, 90, 100),
+    labels = c("0% to 60%", "60% to 65%", "65% to 70%", "70% to 75%", "75% to 80%", "80% to 85%", "85% to 90%", "90% and higher"),
+    title = "Labor Force Participation Rate (%)"
+  ) + 
+  tm_layout(
+    main.title = "Labor Force Participation Rate by State for Women (2017)",
+    main.title.position = c("center", "top"),
+    legend.outside = TRUE,
+    legend.outside.position = "right",
+    frame = FALSE
+  )
+
+#LFPR Men Map
+merged_us_lfprfw_state_data %>%
+  tm_shape() +
+  tm_polygons(
+    "Male_Participation",
+    palette = "Greens",
+    breaks = c(0, 60, 65, 70, 75, 80, 85, 90, 100),
+    labels = c("0% to 60%", "60% to 65%", "65% to 70%", "70% to 75%", "75% to 80%", "80% to 85%", "85% to 90%", "90% and higher"),
+    title = "Labor Force Participation Rate (%)"
+  ) + 
+  tm_layout(
+    main.title = "Labor Force Participation Rate by State for Men (2017)",
+    main.title.position = c("center", "top"),
+    legend.outside = TRUE,
+    legend.outside.position = "right",
+    frame = FALSE
+  )
+```
+
+
+## 2) Labor Force Participation rate for Women by Age Over Time (2010-2022)
+```{r echo=TRUE}
+#16 years and older
+(ggplot(female_participation, aes(x = Year, y = `25to34`)) +
+    geom_line(size = 1) +
+    labs(
+      title = "Female Labor Force Participation (Ages 25 to 34)",
+      x = "Year",
+      y = "Participation Rate"
+      )) +
+   scale_x_continuous(
+    breaks = seq(min(w_m_income$Year), max(w_m_income$Year), by = 1),
+    labels = as.integer
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(scale = 1),
+    limits = c(73, 78))
+
+#25 to 54 years
+(ggplot(female_participation, aes(x = Year, y = `35to44`)) +
+    geom_line(size = 1) +
+    labs(
+      title = "Female Labor Force Participation (Ages 35 to 44)",
+      x = "Year",
+      y = "Participation Rate"
+      )) +
+   scale_x_continuous(
+    breaks = seq(min(w_m_income$Year), max(w_m_income$Year), by = 1),
+    labels = as.integer
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(scale = 1),
+    limits = c(73, 78))
+
+#55 to 64 years
+(ggplot(female_participation, aes(x = Year, y = `45to54`)) +
+    geom_line(size = 1) +
+    labs(
+      title = "Female Labor Force Participation (Ages 45 to 54)",
+      x = "Year",
+      y = "Participation Rate"
+      )) +
+   scale_x_continuous(
+    breaks = seq(min(w_m_income$Year), max(w_m_income$Year), by = 1),
+    labels = as.integer
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(scale = 1),
+    limits = c(73, 78))
+
+```
+
+## 3) Graphs for Change in Representation of Women in Job-levels
+```{r echo=TRUE}
+desired_order <- c("Entry_level", "Manager", "Director", "VP", "Sr_P", "C_suite_exec")
+
+#2017
+new_2017 <- job_level_2017 %>%
+  pivot_longer(
+    cols = c("White", "Color", "Overall"),
+    names_to = "Race",
+    values_to = "Percent"
+    ) %>%
+  mutate(Position = factor(Position, levels = desired_order))
+
+new_2017 %>%
+  ggplot(aes(x = Position, y = Percent, fill = Race)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Changes in Representation of in Job Levels (2017)",
+    x = "Job Position",
+    y = "Percent"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+
+#2024
+new_2024 <- job_level_2024 %>%
+  pivot_longer(
+    cols = c("White", "Color", "Overall"),
+    names_to = "Race",
+    values_to = "Percent"
+    ) %>%
+  mutate(Position = factor(Position, levels = desired_order))
+
+new_2024 %>%
+  ggplot(aes(x = Position, y = Percent, fill = Race)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Changes in Representation of in Job Levels (2024)",
+    x = "Job Position",
+    y = "Percent"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+```
+
+## 4) Line Graph of Women vs. Men Average Annual Income Over Time (2010-2022)
+
+```{r echo=TRUE}
+#Women
+women_income <- w_m_income %>%
+  pivot_longer(
+    cols = c("Women"),
+    values_to = "Income"
+    ) %>%
+  select(
+    Year,
+    name,
+    Income
+  )
+
+women_income %>%
+  ggplot(aes(x = Year, y = Income)) +
+  geom_line(color = "pink", size = 1.5) +
+  labs(
+    title = "Line Graph of Women's Annual Income Over Time",
+    x = "Year",
+    y = "Average Annual Income ($)"
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(women_income$Year), max(women_income$Year), by = 1),
+    labels = as.integer
+  ) +
+  scale_y_continuous(labels = label_dollar(),
+                     limits = c(35000, 70000)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Men
+men_income <- w_m_income %>%
+  pivot_longer(
+    cols = c("Men"),
+    values_to = "Income"
+    ) %>%
+  select(
+    Year,
+    name,
+    Income
+  )
+
+men_income %>%
+  ggplot(aes(x = Year, y = Income)) +
+  geom_line(color = "blue", size = 1.5) +
+  labs(
+    title = "Line Graph of Men's Annual Income Over Time",
+    x = "Year",
+    y = "Average Annual Income ($)"
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(women_income$Year), max(women_income$Year), by = 1),
+    labels = as.integer
+  ) +
+  scale_y_continuous(labels = label_dollar(),
+                     limits = c(35000, 70000)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
